@@ -1,0 +1,7 @@
+{
+  "prefix": "canvasReportDataAnalyzer",
+  "paths": {
+    "canvasReportDataAnalyzer": "."
+  },
+  "translations": ["translations/ja-JP.json"]
+}

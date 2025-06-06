@@ -1,0 +1,19 @@
+{
+  "name": "canvasReportDataAnalyzer",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "yarn plugin-helpers build",
+    "plugin-helpers": "../../scripts/use_node ../../scripts/plugin_helpers",
+    "osd": "../../scripts/use_node ../../scripts/osd"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "2.0.0",
+    "html2canvas": "^1.4.1",
+    "nodemailer": "^7.0.3",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^6.4.17"
+  }
+}
