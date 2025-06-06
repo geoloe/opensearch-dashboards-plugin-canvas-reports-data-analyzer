@@ -1,0 +1,2 @@
+# opensearch-dashboards-plugin-canvas-reports-data-analyzer
+This is an opensearch dashboards plugin that allows on the one hand the creation of canvas like pdf reports with custom template and logo.  It saves your generated reports, fetches them and offers the features to filter, download, email and delete them on the UI. It also offers a user-friendly Query Workspace without Dev Tools knowledge.
