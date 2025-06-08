@@ -34,7 +34,12 @@ export class CanvasReportDataAnalyzerPlugin implements Plugin {
           body: {
             report_directory: config.report_directory,
             organization: config.smtp.organization,
-            allow_table_of_contents: config.allow_table_of_contents
+            allow_table_of_contents: config.allow_table_of_contents,
+            text_positions_and_sizes: {
+              tenant_name: config.text_positions_and_sizes.tenant_name,
+              dashboard_name: config.text_positions_and_sizes.dashboard_name,
+              timestamp: config.text_positions_and_sizes.timestamp
+            }
           }
         });
       }

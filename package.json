@@ -1,6 +1,12 @@
 {
-  "name": "canvasReportDataAnalyzer",
+  "name": "canvas_report_data_analyzer",
   "version": "0.0.0",
+  "author": {
+    "name": "Georg Löffler",
+    "github": "https://github.com/geoloe",
+    "email": "gloffler059@gmail.com"
+  },
+  "description": "A plugin for analyzing and reporting data from OpenSearch Dashboards.",
   "private": true,
   "scripts": {
     "build": "yarn plugin-helpers build",

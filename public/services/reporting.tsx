@@ -5,6 +5,7 @@ import { i18n } from '@osd/i18n';
 import { DashboardState, VisualizationData, ReportingDependencies, ModalHandlers, PhaseMessage, PhaseTracking, ProgressCallback } from '../types';
 import { PdfDocument } from '../components/pdf_document';
 import { AssetService } from './fetch_assets';
+import { TextPositions } from '../types';
 
 /** 
  * Phase weight configuration for progress calculation
@@ -20,7 +21,6 @@ const PHASE_CONFIG = {
 } as const;
 
 const DEFAULT_TENANT_NAME = 'Private';
-const DEFAULT_DASHBOARD_NAME = 'Dashboard Report';
 const MAX_TENANT_NAME_LENGTH = 29;
 
 const DASHBOARD_TITLE_STYLES = `
@@ -86,7 +86,7 @@ export class ReportingService {
   private phaseTracker!: PhaseTracking;
   private phaseHistory = new Map<PhaseKey, number[]>();
   private lastPhaseProgress = 0;
-  private tenantName = 'Customer ID';
+  private tenantName = 'Organization ID';
   private completeName = this.tenantName;
   private dashboardName = 'Dashboard';
 
@@ -166,12 +166,12 @@ export class ReportingService {
    * service.setModalHandlers(modalHandlers);
    * await service.generatePdfReport();
    */
-  async generatePdfReport(allowTableOfContents: boolean, assetService: AssetService, organization: string): Promise<void> {
+  async generatePdfReport(textPositions: TextPositions, allowTableOfContents: boolean, assetService: AssetService, organization: string): Promise<void> {
     try {
       await this.executePhase('initialization', this.handleInitialization);
-      const dashboardState = await this.executePhase('data_gathering', () => this.handleDataCollection(organization));
+      const dashboardState = await this.executePhase('data_gathering', () => this.handleDataCollection(organization, allowTableOfContents));
       await this.executePhase('info_retrieval', this.handleInformationRetrieval);
-      await this.executePhase('pdf_generation', () => this.handlePdfGeneration(allowTableOfContents, assetService, dashboardState));
+      await this.executePhase('pdf_generation', () => this.handlePdfGeneration(textPositions, allowTableOfContents, assetService, dashboardState));
       await this.executePhase('success', this.handleSuccess);
     } catch (error) {
       this.handleError(error as Error);
@@ -196,17 +196,18 @@ export class ReportingService {
    * Handles data collection phase - gathers dashboard state and visualizations
    * @private
    * @param {string} organization - Organization name for report context
+   * @param {boolean} allowTableOfContents - Flag to include table of contents in the report
    * @returns {Promise<DashboardState>} Complete dashboard snapshot with visualizations
    * @throws {Error} If dashboard elements not found or data retrieval fails
    */
-  private handleDataCollection = async (organization: string): Promise<DashboardState> => {
+  private handleDataCollection = async (organization: string, allowTableOfContents: boolean): Promise<DashboardState> => {
     const panelElements = this.getPanelElements();
     const progressHandler = this.createProgressHandler('data_gathering', 2 + panelElements.length);
-    return this.getDashboardState(organization, progressHandler);
+    return this.getDashboardState(allowTableOfContents, organization, progressHandler);
   };
 
   /**
-   * Handles information retrieval phase - collects tenant/customer/product info
+   * Handles information retrieval phase - collects tenant/organization name/dashboard title info
    * @private
    * @returns {Promise<void>}
    * @throws {Error} If DOM elements not found or information retrieval fails
@@ -215,14 +216,68 @@ export class ReportingService {
     const progressHandler = this.createProgressHandler('info_retrieval', 3);
     await Promise.all([
       this.retrieveTenantInfo(progressHandler),
-      this.retrieveCustomerInfo(progressHandler),
-      this.retrieveProductInfo(progressHandler)
+      this.retrieveOrganizationNameInfo(progressHandler),
+      this.retrieveDashboardInfo(progressHandler)
     ]);
   };
+
+  /**
+   * Checks tenant access using backend roles
+   * @private
+   * @returns {Promise<boolean>} True if tenant access is granted, false otherwise
+   * @throws {Error} If HTTP service is unavailable or tenant roles cannot be fetched
+   */
+  private async checkTenantAccess(): Promise<boolean> {
+
+    const fetchTenantAndUser = async () => {
+      try {
+        if (!this.dependencies?.http) {
+          throw new Error('HTTP service unavailable');
+        }
+        const response = await this.dependencies.http.get<{ 
+          tenant: string, 
+          username: string
+        }>('/api/canvas_report_data_analyzer/tenant');
+        
+        return response.tenant || '__user__';
+      } catch (error) {
+        console.error('Error fetching tenant info:', error);
+        return '__user__' ;
+      }
+    };
+    try {
+      if (!this.dependencies?.http) {
+        console.error('HTTP service unavailable');
+        return false;
+      }
+
+      const tenantName = await fetchTenantAndUser();
+      
+      if (!tenantName) {
+        console.error('Tenant name not available');
+        return false;
+      }
+      
+      const hasPrivateorGlobalMatch = tenantName.toLowerCase() === '__user__' || tenantName.toLowerCase() === '';
+      
+      if (hasPrivateorGlobalMatch) {
+        console.warn('Tenant access is private or global, no specific tenant access required');
+        return true;
+      }
+      else {  
+        return false;
+      }
+      
+    } catch (error) {
+      console.error('Error checking tenant access:', error);
+      return false;
+    }
+  }
 
 
   /**
    * Handles PDF generation phase - creates and merges PDF documents
+   * @param {TextPositions} textPositions - Positions for tenant name, dashboard name, and timestamp
    * @param {DashboardState} dashboardState - Collected dashboard data
    * @param {AssetService} assetService - Service for fetching assets like templates and logos
    * @param {boolean} allowTableOfContents - Flag to include table of contents in the report
@@ -230,24 +285,34 @@ export class ReportingService {
    * @returns {Promise<void>}
    * @throws {Error} If PDF generation or merging fails
    */
-  private handlePdfGeneration = async (allowTableOfContents: boolean, assetService: AssetService, dashboardState: DashboardState): Promise<void> => {
+  private handlePdfGeneration = async (textPositions: TextPositions, allowTableOfContents: boolean, assetService: AssetService, dashboardState: DashboardState): Promise<void> => {
     const progressHandler = this.createProgressHandler(
       'pdf_generation',
       dashboardState.visualizations.length
     );
     
     const mergedPdfBytes = await this.generateAndMergePdf(
+      textPositions,
       allowTableOfContents,
       assetService,
       dashboardState.visualizations,
       progressHandler
     );
     
-    await this.savePdfReport(mergedPdfBytes, dashboardState.title);
-    this.finalizePdfDownload(mergedPdfBytes, dashboardState.title);
-    setTimeout(() => {
-      window.location.reload();
-    }, 3500);
+    const hasTenantAccess = await this.checkTenantAccess();
+    
+    if (!hasTenantAccess) {
+      await this.savePdfReport(mergedPdfBytes, dashboardState.title);
+      this.finalizePdfDownload(mergedPdfBytes, dashboardState.title);
+      setTimeout(() => {
+        window.location.reload();
+      }, 3500); 
+    } else {
+      this.finalizePdfDownload(mergedPdfBytes, dashboardState.title);
+      setTimeout(() => {
+        window.location.reload();
+      }, 3500); 
+    }
   };
 
   /**
@@ -333,6 +398,7 @@ export class ReportingService {
 
   /**
    * Generates and merges PDF documents from template and report content
+   * @param {TextPositions} textPositions - Positions for tenant name, dashboard name, and timestamp
    * @param {boolean} allowTableOfContents - Flag to include table of contents in the report
    * @param {AssetService} assetService - Service for fetching assets like templates and logos
    * @param {VisualizationData[]} visualizations - Dashboard visualizations to include
@@ -342,6 +408,7 @@ export class ReportingService {
    * @throws {Error} If PDF loading, merging, or saving fails
    */
   private async generateAndMergePdf(
+    textPositions: TextPositions,
     allowTableOfContents: boolean,
     assetService: AssetService,
     visualizations: VisualizationData[],
@@ -359,7 +426,7 @@ export class ReportingService {
     ]);
 
     const mergedPdf = await PDFDocument.create();
-    await this.mergePdfContent(mergedPdf, templatePdf, reportPdf);
+    await this.mergePdfContent(textPositions, mergedPdf, templatePdf, reportPdf);
 
     // Simulate visualization processing
     for (const _ of visualizations) {
@@ -391,6 +458,7 @@ export class ReportingService {
 
   /**
    * Merges template and report content into final PDF
+   * @param {TextPositions} textPositions - Positions for tenant name, dashboard name, and timestamp
    * @param {PDFDocument} mergedPdf - Target PDF document
    * @param {PDFDocument} template - Template PDF with cover/final pages
    * @param {PDFDocument} report - Generated report content PDF
@@ -400,12 +468,13 @@ export class ReportingService {
    * @throws {Error} If PDF operations fail
    */
   private async mergePdfContent(
+    textPositions: TextPositions,
     mergedPdf: PDFDocument,
     template: PDFDocument,
     report: PDFDocument,
     progressCallback?: () => void
   ): Promise<void> {
-    await this.addCoverPage(mergedPdf, template);
+    await this.addCoverPage(textPositions, mergedPdf, template);
     progressCallback?.();
     await this.addReportPages(mergedPdf, report);
     progressCallback?.();
@@ -415,13 +484,14 @@ export class ReportingService {
 
   /**
    * Adds cover page content to merged PDF
+   * @param {TextPositions} textPositions - Positions for tenant name, dashboard name, and timestamp
    * @param {PDFDocument} mergedPdf - Target PDF document
    * @param {PDFDocument} template - Source template PDF
    * @returns {Promise<void>}
    * @private
    * @throws {Error} If font embedding or page drawing fails
    */
-  private async addCoverPage(mergedPdf: PDFDocument, template: PDFDocument): Promise<void> {
+  private async addCoverPage(textPositions: TextPositions, mergedPdf: PDFDocument, template: PDFDocument): Promise<void> {
     const [coverPage] = await mergedPdf.copyPages(template, [0]);
     const page = mergedPdf.addPage(coverPage);
     
@@ -432,25 +502,25 @@ export class ReportingService {
     ]);
 
     page.drawText(this.completeName, {
-      x: mmToPoints(22),
-      y: mmToPoints(140),
-      size: 28,
+      x: mmToPoints(textPositions.tenant_name.x),
+      y: mmToPoints(textPositions.tenant_name.y),
+      size: textPositions.tenant_name.size,
       color: rgb(0, 0, 0),
       font: fontBold,
     });
 
     page.drawText(this.dashboardName, {
-      x: mmToPoints(22),
-      y: mmToPoints(120),
-      size: 20,
+      x: mmToPoints(textPositions.dashboard_name.x),
+      y: mmToPoints(textPositions.dashboard_name.y),
+      size: textPositions.dashboard_name.size,
       color: rgb(0, 0, 0),
       font: fontBold,
     });
 
     page.drawText(this.getFormattedTimestamp(), {
-      x: mmToPoints(22),
-      y: mmToPoints(55),
-      size: 18,
+      x: mmToPoints(textPositions.timestamp.x),
+      y: mmToPoints(textPositions.timestamp.y),
+      size: textPositions.timestamp.size,
       color: rgb(0, 0, 0),
       font: fontRegular,
     });
@@ -480,25 +550,25 @@ export class ReportingService {
   }
 
   /**
-   * Retrieves customer information from details panel
+   * Retrieves Organization Name if given from details panel
    * @private
-   * @throws {Error} If details panel or customer info element not found
+   * @throws {Error} If details panel or organization info element not found
    */
-  private async retrieveCustomerInfo(progressHandler: ProgressCallback): Promise<void> {
+  private async retrieveOrganizationNameInfo(progressHandler: ProgressCallback): Promise<void> {
     try {
       await this.toggleDetailsPanel();
       await this.delay(100);
 
-      const customerText = this.getElementText(
+      const organizationText = this.getElementText(
         '[data-test-subj="tableDocViewRow-organization.name-value"] span',
         this.tenantName,
         false
       );
       
-      this.completeName = this.formatCustomerName(customerText);
+      this.completeName = this.formatOrganizationName(organizationText);
       progressHandler();
     } catch (error) {
-      throw new Error('Customer information retrieval failed', { cause: error });
+      throw new Error('Organization information retrieval failed', { cause: error });
     }
   }
 
@@ -507,14 +577,10 @@ export class ReportingService {
    * @private
    * @throws {Error} If product element not found or data attribute missing
    */
-  private async retrieveProductInfo(progressHandler: ProgressCallback): Promise<void> {
+  private async retrieveDashboardInfo(progressHandler: ProgressCallback): Promise<void> {
     try {
-      const productElement = document.querySelector('.dshDashboardViewport');
-      this.dashboardName = productElement?.getAttribute('data-title')
-        ?.split('(')[0]
-        .replace(/^\[Report\]\s*/, '')
-        .trim() 
-        ?? DEFAULT_DASHBOARD_NAME;
+      const dashboardTitle = document.querySelector('.dshDashboardViewport');
+      this.dashboardName = dashboardTitle?.getAttribute('data-title')|| await this.getDashboardTitleText();
       
       await this.delay(100);
       progressHandler();
@@ -582,12 +648,12 @@ export class ReportingService {
   }
 
   /**
-   * Formats customer name with line breaks for PDF display
-   * @param {string} fullText - Raw customer name from DOM
+   * Formats organization name with line breaks for PDF display
+   * @param {string} fullText - Raw organization name from DOM
    * @returns {string} Formatted name with line breaks
    * @private
    */
-  private formatCustomerName(fullText: string): string {
+  private formatOrganizationName(fullText: string): string {
     const sanitized = fullText.replace(/[^a-zA-Z0-9äüöÄÜÖß.\s]/g, '');
     if (sanitized.length <= MAX_TENANT_NAME_LENGTH) return sanitized;
 
@@ -819,12 +885,17 @@ export class ReportingService {
     const trendMetrics = chartPanels.filter(panel => panel.querySelector('.osdRedirectCrossAppLinks'));
     const tsvbMetrics = chartPanels.filter(panel => panel.querySelector('.tvbSplitVis'));
     const mapCharts = chartPanels.filter(panel => panel.querySelector('.visChart.vgaVis'));
+    const tvbSplitVis = chartPanels.filter(panel => panel.querySelector('.tvbSplitVis'));
+    const tvbTableView = chartPanels.filter(panel => panel.querySelector('[data-test-subj="tableView"]'));
+    
 
     const metricPanels = panels.filter(panel => panel.querySelector('.mtrVis'));
     
     const tablePanels = panels.filter(panel => panel.querySelector('.visualization.tableVis'));
 
     const cloudPanels = panels.filter(panel => panel.querySelector('.tgcChart'));
+
+    const markdownTsvbPanels = panels.filter(panel => panel.querySelector('[data-test-subj="tsvbMarkdown"]'));
 
     const originalStyles: Map<HTMLElement, OriginalStyles> = new Map();
 
@@ -965,6 +1036,34 @@ export class ReportingService {
       });
     });
 
+    tvbSplitVis.forEach(panel => {
+      storeAndApplyStyles(panel, {
+        top: '1600px',
+        left: '955px',
+        width: '955px',
+        height: '540px',
+        position: 'absolute',
+        visibility: 'hidden'
+      }, {
+        width: '100%',
+        height: '100%'
+      });
+    });
+
+    tvbTableView.forEach(panel => {
+      storeAndApplyStyles(panel, {
+        top: '1600px',
+        left: '955px',
+        width: '955px',
+        height: '540px',
+        position: 'absolute',
+        visibility: 'hidden'
+      }, {
+        width: '100%',
+        height: '100%'
+      });
+    });
+
     cloudPanels.forEach(panel => {
       storeAndApplyStyles(panel, {
         top: '540px',
@@ -980,6 +1079,20 @@ export class ReportingService {
     });
 
     mapCharts.forEach(panel => {
+      storeAndApplyStyles(panel, {
+        top: '540px',
+        left: '964px',
+        width: '948px',
+        height: '384px',
+        position: 'absolute',
+        visibility: 'hidden'
+      }, {
+        width: '100%',
+        height: '100%'
+      });
+    });
+
+    markdownTsvbPanels.forEach(panel => {
       storeAndApplyStyles(panel, {
         top: '540px',
         left: '964px',
@@ -1015,19 +1128,20 @@ export class ReportingService {
    * Retrieves the current dashboard state including title, time range, and visualizations
    * @param progressCallback - Optional callback to report progress
    * @param organization - Organization name for report context
+   * @param {boolean} allowTableOfContents - Flag to include table of contents in the report
    * @returns Promise resolving to DashboardState
    * @throws Error when dashboard services are not available
    */
-  private async getDashboardState(organization: string, progressCallback?: () => void): Promise<DashboardState> {
+  private async getDashboardState(allowTableOfContents: boolean, organization: string, progressCallback?: () => void): Promise<DashboardState> {
     this.validateDashboardServices();
     
-    const dashboardTitle = await this.getDashboardTitle(progressCallback);
+    const dashboardTitle = await this.getDashboardTitleText();
     const timeRange = await this.getTimeRange(progressCallback);
 
     return {
       title: dashboardTitle,
       timeRange,
-      visualizations: await this.getVisualizationData(organization, progressCallback),
+      visualizations: await this.getVisualizationData(allowTableOfContents, organization, progressCallback),
       timestamp: new Date().toISOString(),
     };
   }
@@ -1040,19 +1154,6 @@ export class ReportingService {
     if (!this.dashboard || !this.embeddable || !this.notification) {
       throw new Error('Dashboard services not available');
     }
-  }
-
-  /**
-   * Extracts dashboard title from DOM
-   * @param progressCallback - Optional progress callback
-   * @returns Promise resolving to dashboard title
-   */
-  private async getDashboardTitle(progressCallback?: () => void): Promise<string> {
-    const selector = 'span.euiBreadcrumb.euiBreadcrumb--last[data-test-subj="breadcrumb last"]';
-    const element = document.querySelector(selector);
-    await this.reportProgress(progressCallback);
-    
-    return element?.textContent?.trim() || 'Untitled Dashboard';
   }
 
   /**
@@ -1102,10 +1203,12 @@ export class ReportingService {
   /**
    * Processes and aggregates all visualization data for PDF reporting
    * @param progressCallback - Optional progress reporting callback
+   * @param {boolean} allowTableOfContents - Flag to include table of contents in the report
    * @param organization - Organization name for report context 
    * @returns Promise resolving to complete visualization data array
    */
   private async getVisualizationData(
+    allowTableOfContents: boolean,
     organization: string,
     progressCallback?: () => void
   ): Promise<VisualizationData[]> {
@@ -1135,7 +1238,7 @@ export class ReportingService {
       
       const validPanels = this.validatePanels(panels);
       const totalPages = this.calculateTotalPages(validPanels.length);
-      const footerImages = await this.createFooterImages(organization, titleText, totalPages, progressCallback);
+      const footerImages = await this.createFooterImages(allowTableOfContents, organization, titleText, totalPages, progressCallback);
 
       return this.assembleFinalVisualizations(
         dashboardTitleImage,
@@ -1421,7 +1524,6 @@ export class ReportingService {
   private isExcludedPanelType(panel: Element): boolean {
     const excludedSelectors = [
       '.visualization.markdownVis',
-      '[data-test-subj="tsvbMarkdown"]',
       '[data-test-subj="discoverTable"]',
       '.icvContainer'
     ];
@@ -1617,10 +1719,22 @@ export class ReportingService {
    * @returns Cleaned title text
    */
   private getDashboardTitleText(): string {
-    const element = document.querySelector(
-      'span.euiBreadcrumb.euiBreadcrumb--last[data-test-subj="breadcrumb last"]'
-    );
-    return element?.textContent?.trim() || 'Dashboard Report';
+    try {
+      const selector = '[data-test-subj="breadcrumb last"].euiBreadcrumb.euiBreadcrumb--last';
+      const breadcrumb = document.querySelector<HTMLSpanElement>(selector);
+      
+      if (!breadcrumb) {
+        console.warn('Dashboard breadcrumb element not found');
+        return 'Dashboard Report';
+      }
+      
+      const title = breadcrumb.textContent?.trim() || 'Dashboard Report';
+      
+      return title;
+    } catch (error) {
+      console.error('Error retrieving dashboard title:', error);
+      return 'Dashboard Report';
+    }
   }
 
   /**
@@ -1667,6 +1781,7 @@ export class ReportingService {
 
   /**
    * Generates footer images for each page of the PDF report
+   * @param {boolean} allowTableOfContents - Flag to include table of contents in the report
    * @param {string} title - The dashboard title to display in the footer
    * @param {number} totalPages - Total number of pages in the final PDF
    * @param {string} organization - Organization name for footer context
@@ -1674,11 +1789,14 @@ export class ReportingService {
    * @returns {Promise<string[]>} Array of base64-encoded footer images indexed by page number
    * @description Creates temporary footer elements, captures screenshots, and cleans up DOM elements
    */
-  private async createFooterImages(organization: string, title: string, totalPages: number, progressCallback?: () => void): Promise<string[]> {
+  private async createFooterImages(allowTableOfContents: boolean, organization: string, title: string, totalPages: number, progressCallback?: () => void): Promise<string[]> {
       const footerImages: string[] = [];
       
       for (let page = 0; page <= totalPages; page++) {
         const footerElement = document.createElement('div');
+        const displayPage = allowTableOfContents ? page : page - 1;
+        const displayTotalPages = allowTableOfContents ? totalPages : totalPages - 1;
+
         footerElement.innerHTML = `
         <div style="
           display: flex;
@@ -1704,10 +1822,10 @@ export class ReportingService {
             <span>${new Date().toLocaleDateString('de-DE')}</span>
           </div>
           <div style="font-size: 10px; color: #888;">
-            Page ${page} of ${totalPages}
+            Page ${displayPage} of ${displayTotalPages}
           </div>
         </div>
-      `;
+            `;
     
         Object.assign(footerElement.style, {
           position: 'absolute',

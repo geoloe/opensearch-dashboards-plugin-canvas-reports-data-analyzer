@@ -452,7 +452,7 @@ export const renderApp = (
 
     const handleDownload = async (fileId: string, fileName: string) => {
       try {
-        const url = `/ubf/api/canvas_report_data_analyzer/download/${fileId}`;
+        const url = `/api/canvas_report_data_analyzer/download/${fileId}`;
         const response = await fetch(url);
         
         if (!response.ok) throw new Error('Download failed');

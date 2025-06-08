@@ -4,6 +4,7 @@ import { ReportingService } from '../services/reporting';
 import { AssetService } from '../services/fetch_assets';
 import { HttpSetup } from '../../../../src/core/public';
 import { Cycle, InterfaceFileClipboardCheckCheckmarkEditTaskEditionChecklistCheckSuccessClipboardForm, Warningsign } from '../assets/assets';
+import { TextPositions } from '../types';
 
 interface GeneratePdfReportsButtonProps {
   reportingService: ReportingService;
@@ -30,21 +31,40 @@ export const GeneratePdfReportsButton: React.FC<GeneratePdfReportsButtonProps> =
 
   const [organization, setOrganization] = useState<string>("Your Organization");
   const [allowTableOfContents, setAllowTableOfContents] = useState<boolean>(true);
+  const [textPositions, setTextPositions] = useState<TextPositions>({
+    tenant_name: { x: 22, y: 140, size: 42 },
+    dashboard_name: { x: 22, y: 120, size: 28 },
+    timestamp: { x: 22, y: 55, size: 28 }
+  });
 
   useEffect(() => {
-    const fetchToCAndOrganization = async () => {
+    const fetchConfig = async () => {
       try {
         const configResponse = await http.get('/api/canvas_report_data_analyzer/config');
+        
         setOrganization(configResponse.organization || "Your Organization");
+        
         setAllowTableOfContents(configResponse.allow_table_of_contents);
+        
+        setTextPositions({
+          tenant_name: configResponse.text_positions_and_sizes?.tenant_name || { x: 22, y: 140, size: 42 },
+          dashboard_name: configResponse.text_positions_and_sizes?.dashboard_name || { x: 22, y: 120, size: 28 },
+          timestamp: configResponse.text_positions_and_sizes?.timestamp || { x: 22, y: 55, size: 28 }
+        });
+        
       } catch (error) {
-        console.error("Failed to fetch organization:", error);
+        console.error("Failed to fetch configuration:", error);
         setAllowTableOfContents(true);
         setOrganization("Your Organization");
+        setTextPositions({
+          tenant_name: { x: 22, y: 140, size: 42 },
+          dashboard_name: { x: 22, y: 120, size: 28 },
+          timestamp: { x: 22, y: 55, size: 28 }
+        });
       }
     };
 
-    fetchToCAndOrganization();
+    fetchConfig();
   }, [http]);
 
   useEffect(() => {
@@ -61,7 +81,7 @@ export const GeneratePdfReportsButton: React.FC<GeneratePdfReportsButtonProps> =
       if (!assetService) {
         throw new Error('AssetService is required to generate PDF reports.');
       }
-      await reportingService.generatePdfReport(allowTableOfContents, assetService, organization);
+      await reportingService.generatePdfReport(textPositions, allowTableOfContents, assetService, organization);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       setModalState({ isVisible: true, message: errorMessage, type: 'error', progress: 0});

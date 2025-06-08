@@ -17,6 +17,16 @@ export interface DashboardState {
 }
 
 /** 
+ * Configuration for text positions in the report
+ * @interface
+ */
+export interface TextPositions {
+  tenant_name: { x: number; y: number; size: number };
+  dashboard_name: { x: number; y: number; size: number };
+  timestamp: { x: number; y: number; size: number };
+}
+
+/** 
  * Data structure for individual visualization capture results
  * @interface
  */

@@ -51,7 +51,7 @@ export function InterfaceFileClipboardCheckCheckmarkEditTaskEditionChecklistChec
       {...props}
     >
       <g
-        fill="#0055A6"
+        fill="none"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
