@@ -10,6 +10,28 @@ The plugin handles report storage, retrieval, filtering, distribution (download/
 
 ---
 
+## Examples
+![Sample Report 1](/external_assets/example1.pdf)  
+*Sample Dashboard*
+
+![Sample Report 2](/external_assets/example2.pdf)  
+*Sample Dashboard*
+
+![Sample Report 3](/external_assets/example3.pdf)  
+*Sample Dashboard*
+
+## Screenshots
+![Sample Report 3](/external_assets/reports_view.png)  
+*Reports View*
+
+![Sample Report 3](/external_assets/email_view.png)  
+*Email View*
+
+![Sample Report 3](/external_assets/data_analysis_view.png)  
+*Data Analysis View*
+
+---
+
 ## Canvas Reporting Feature
 
 ### Core Functionality
@@ -33,7 +55,7 @@ The plugin handles report storage, retrieval, filtering, distribution (download/
    - Backend authorization checks for all file operations
 
 2. **Access Control**:
-   - Requires `canvas_reporting` role (applies to all users including admin)
+   - Requires `canvas_reporting` role (applies to all users including admin). This role can be empty. No index/cluster/tenant permissions are needed. Nevertheless, consider setting tenant read-only roles for your users.
    - Without role:
      - Generate PDF button appears disabled
      - Reports list hidden
@@ -56,7 +78,7 @@ canvas_report_data_analyzer:
     from: "reports@example.com"
     organization: "Your Company Name"
     proxy: "http://your_proxy:8080"             # Optional
-  text_positions_and_sizes:                     # x, y values are in points
+  text_positions_and_sizes:                     # x, y values are in millimeters
     tenant_name: 
       x: 20                                     # X position for tenant name text in the report
       y: 180                                    # Y position for tenant name text in the report
@@ -85,15 +107,15 @@ canvas_report_data_analyzer:
    - Positions and font sizes configurable via YAML
 
 3. **Content Flow**:
-   - Optional TOC (disabled for dashboards with >20 visualizations)
+   - Optional TOC
    - Main content sections show:
      - Dashboard title
-     - Active time range
-     - Visualizations with titles
+     - Active time range at generation trigger
+     - Visualizations with their corresponding titles. Enable the embedded title for a visualization and it will be used as the PDF visualizations title for that visualization.
      - Footer with:
        - Dashboard title
-       - Organization name
-       - Date
+       - Organization name (can be defined in .yml seen above)
+       - Date (e.g. DD.MM.YYYY)
        - Page numbers
 
 4. **Visualization Layout**:
@@ -101,8 +123,10 @@ canvas_report_data_analyzer:
    - Subsequent pages: 2 visualizations each
    - Final page: 1-2 visualizations as needed
 
-### Visualizations with Standardized Dimensions
-For Dashboards with more than 20 Visualizations the Table of Contents page will overflow. But all visualizations will render on the PDF Report. You can set for these cases the `allow_table_of_contents` allowed option to `false`
+### PDF Visualizations
+For Dashboards with more than 20 Visualizations the Table of Contents page will overflow. But all visualizations will render on the PDF Report. You can set for these cases the `allow_table_of_contents` option to `false`.
+
+Here as js array all covered Visualization Types with standardized dimensions regardless of window size of the browser. All other will still render but very small or big browser window sizes will have impact on rendered visualizations.
 ```javascript
 const visualizationsWithStandardizedDimensions = [
   '.arcs',                    // Pie charts
@@ -117,7 +141,7 @@ const visualizationsWithStandardizedDimensions = [
   '.tgcChart'                 // Tag cloud
 ];
 
-const visualizationsWithoutStandardizedDimensions = [
+const visualizationsWithoutStandardizedDimensionsThatWillBeSkipped = [
   '[data-test-subj="tsvbMarkdown"]',  // Markdown
   '[data-test-subj="tableView"]'      // Discover tables
 ];
@@ -134,7 +158,7 @@ const visualizationsWithoutStandardizedDimensions = [
 ## Reports Management Interface
 
 ### Access Points
-1. Top navigation: "Reports and Data Analysis" dropdown
+1. Top navigation: "Reports and Data Analysis" dropdown. Will display "Data Analysis" if role: `canvas_reporting` is not assigned to the user logged in.
 2. Sidebar: "Reports/Data Analysis" menu item
 
 ### Features
@@ -196,30 +220,6 @@ const visualizationsWithoutStandardizedDimensions = [
 | Visualization missing | Raw Markdown and Discover Search Tables will be skipped |
 | Email sending disabled | Wait 10 minutes after previous send |
 
----
-
-## Examples
-![Sample Report 1](/external_assets/example1.pdf)  
-*Sample Dashboard*
-
-![Sample Report 2](/external_assets/example2.pdf)  
-*Sample Dashboard*
-
-![Sample Report 3](/external_assets/example3.pdf)  
-*Sample Dashboard*
-
-## Screenshots
-![Sample Report 3](/external_assets/reports_view.png)  
-*Reports View*
-
-![Sample Report 3](/external_assets/email_view.png)  
-*Email View*
-
-![Sample Report 3](/external_assets/data_analysis_view.png)  
-*Data Analysis View*
-
----
-
 ## Development Notes
 
 ### Schema Validation
@@ -232,7 +232,7 @@ const validateA4Position = (value: number, axis: 'x' | 'y') => {
   }
 };
 ```
-
+---
 ### Default Values
 | Setting | Default |
 |---------|---------|
@@ -256,8 +256,10 @@ const validateA4Position = (value: number, axis: 'x' | 'y') => {
 | smtp.from | `our-email@organization.org` |
 | smtp.organization | `Organization, Inc` |
 
-### Notes
+### Note
 
 I want to mention that the E-Mail template was forked from the Reporting CLI Tool from the Opensearch Project.
 
-All logos and images displayed in the Sample PDFs belong Opensearch
+All data presented in the PDF examples, Dashboards, logos and images displayed in the Sample PDFs belong to Opensearch.
+
+Please feel free to fork this project.
