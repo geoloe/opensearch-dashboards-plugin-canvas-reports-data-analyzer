@@ -10,6 +10,14 @@ The plugin handles report storage, retrieval, filtering, distribution (download/
 
 ---
 
+## Installation
+
+This is an example for OSD version 2.19.0
+
+```
+bin/opensearch-dashboards-plugin install https://github.com/geoloe/opensearch-dashboards-plugin-canvas-reports-data-analyzer/releases/download/2.19.0/canvasReportDataAnalyzer-2.19.0.zip
+```
+
 ## Examples
 ![Sample Report 1](/external_assets/example1.pdf)  
 *Sample Dashboard*
