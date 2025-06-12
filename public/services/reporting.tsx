@@ -1889,6 +1889,148 @@ export class ReportingService {
   }
   // endregion
 
+  /**
+   * Extracts label-value pairs from visualization elements
+   * @param element - Element containing the visualization data
+   * @returns Array of label-value pairs
+   */
+  private extractLabelValuePairs(element: HTMLElement): {label: string, value: string}[] {
+    const dataPoints: {label: string, value: string}[] = [];
+    
+    // Try SVG pie chart labels first
+    const svgLabels = element.querySelectorAll('.labels .label-text');
+    if (svgLabels.length > 0) {
+      svgLabels.forEach(labelEl => {
+        const textContent = labelEl.textContent?.trim() || '';
+        const match = textContent.match(/^(.+?)\s*\(([\d.]+)%\)$/);
+        if (match) {
+          dataPoints.push({
+            label: match[1].trim(),
+            value: `${match[2]}%`
+          });
+        }
+      });
+      return dataPoints;
+    }
+
+    return dataPoints;
+  }
+
+  /**
+   * Creates a standardized table with professional styles
+   * @param data - Array of label-value pairs to populate the table
+   * @param title - Optional title for the table
+   * @returns Configured HTMLTableElement
+   */
+  private createStandardizedTable(data: {label: string, value: string}[], title?: string): HTMLTableElement {
+    const table = document.createElement('table');
+    table.style.cssText = PROFESSIONAL_TABLE_STYLES.table;
+
+    // Create header with standardized column names
+    const thead = table.createTHead();
+    const headerRow = thead.insertRow();
+    
+    const labelHeader = headerRow.insertCell();
+    labelHeader.textContent = 'Label';
+    labelHeader.style.cssText = PROFESSIONAL_TABLE_STYLES.header;
+    labelHeader.style.borderRadius = '4px 0 0 0';
+    
+    const valueHeader = headerRow.insertCell();
+    valueHeader.textContent = 'Value';
+    valueHeader.style.cssText = PROFESSIONAL_TABLE_STYLES.header;
+    valueHeader.style.borderRadius = '0 4px 0 0';
+
+    // Create body
+    const tbody = table.createTBody();
+    
+    data.forEach((item, index) => {
+      const row = tbody.insertRow();
+      row.style.cssText = index % 2 === 0 ? PROFESSIONAL_TABLE_STYLES.rowHover : '';
+      
+      const labelCell = row.insertCell();
+      labelCell.textContent = item.label;
+      labelCell.style.cssText = PROFESSIONAL_TABLE_STYLES.cell;
+      
+      const valueCell = row.insertCell();
+      valueCell.textContent = item.value;
+      valueCell.style.cssText = PROFESSIONAL_TABLE_STYLES.cell;
+      
+      // Add hover effects
+      row.addEventListener('mouseenter', () => {
+        row.style.backgroundColor = '#f8f9fa';
+      });
+      
+      row.addEventListener('mouseleave', () => {
+        row.style.backgroundColor = index % 2 === 0 ? '#f8f9fa' : 'transparent';
+      });
+    });
+
+    return table;
+  }
+
+  /**
+   * Replaces visualization elements with standardized tables
+   * @param element - Element to process
+   */
+  private replaceVisualizationWithTable(element: HTMLElement) {
+    // Extract title if available
+    const title = element.querySelector('[data-title]')?.getAttribute('data-title') || 
+                  element.closest('.embPanel')?.querySelector('.embPanel__header')?.textContent?.trim();
+    
+    // Extract data from visualization
+    const data = this.extractLabelValuePairs(element);
+    
+    if (data.length === 0) return; // Skip if no data extracted
+    
+    // Create standardized table
+    const table = this.createStandardizedTable(data, title);
+    const wrapper = document.createElement('div');
+    
+    Object.assign(wrapper.style, {
+      position: 'relative',
+      width: '100%',
+      height: 'auto',
+      minHeight: '50px',
+      overflow: 'visible',
+      zIndex: '9999',
+      pointerEvents: 'auto',
+      backgroundColor: '#ffffff'
+    });
+    
+    wrapper.appendChild(table);
+    
+    // Replace the visualization container
+    const visualizationContainer = element.querySelector('.visualization') || 
+                                element.querySelector('.visChart');
+    if (visualizationContainer) {
+      visualizationContainer.replaceWith(wrapper);
+    }
+  }
+  /**
+   * Replaces all HTMLDetailsElement with professional tables
+   * @param element - Element to process
+   */
+  private replaceDetailsWithTables(element: HTMLElement) {
+    element.querySelectorAll('details').forEach(details => {
+      const tableContainer = this.createProfessionalTableFromDetails(details);
+      const wrapper = document.createElement('div');
+      
+      Object.assign(wrapper.style, {
+        position: 'relative',
+        width: '100%',
+        height: 'auto',
+        minHeight: '50px',
+        overflow: 'visible',
+        zIndex: '9999',
+        pointerEvents: 'auto',
+        backgroundColor: '#ffffff'
+      });
+      
+      wrapper.appendChild(tableContainer);
+      details.replaceWith(wrapper);
+    });
+  }
+
 
   /**
    * Creates a professional table from HTMLDetailsElement
@@ -1951,27 +2093,6 @@ export class ReportingService {
     container.appendChild(table);
 
     return table;
-  }
-
-  private replaceDetailsWithTables(element: HTMLElement) {
-    element.querySelectorAll('details').forEach(details => {
-      const tableContainer = this.createProfessionalTableFromDetails(details);
-      const wrapper = document.createElement('div');
-      
-      Object.assign(wrapper.style, {
-        position: 'relative',
-        width: '100%',
-        height: 'auto',
-        minHeight: '50px',
-        overflow: 'visible',
-        zIndex: '9999',
-        pointerEvents: 'auto',
-        backgroundColor: '#ffffff'
-      });
-      
-      wrapper.appendChild(tableContainer);
-      details.replaceWith(wrapper);
-    });
   }
 
   // region Screenshot Capture Utilities
@@ -2050,10 +2171,17 @@ export class ReportingService {
   
       let canvas;
       if (hasArcElements) {
-
         clonedElement = original.cloneNode(true) as HTMLElement;
-        this.replaceDetailsWithTables(clonedElement);
         
+        // Check if this is a pie chart (has labels with percentages)
+        const hasPieLabels = clonedElement.querySelectorAll('.labels .label-text').length > 0;
+        
+        if (hasPieLabels) {
+          this.replaceVisualizationWithTable(clonedElement);
+        } else {
+          this.replaceDetailsWithTables(clonedElement);
+        }
+
         clonedElement.querySelectorAll('[data-test-embeddable-id] figcaption.embPanel__header').forEach(el => {
           el.remove();
         });
@@ -2076,18 +2204,24 @@ export class ReportingService {
           });
 
           canvas = await html2canvas(clonedElement, {
-          useCORS: true,
-          scale: 2,
-          logging: true,
-          backgroundColor: null,
-          allowTaint: true,
-          onclone: (clonedDocument, clonedElement) => {
-              element.querySelectorAll('.sibling-container details').forEach(details => {
-                details.replaceWith(this.createProfessionalTableFromDetails(details as HTMLDetailsElement));
-              });
+            useCORS: true,
+            scale: 2,
+            logging: true,
+            backgroundColor: null,
+            allowTaint: true,
+            onclone: (clonedDocument, clonedElement) => {
+              // Handle both pie charts and details tables in the clone
+              const hasPieLabels = clonedElement.querySelectorAll('.labels .label-text').length > 0;
+              if (hasPieLabels) {
+                this.replaceVisualizationWithTable(clonedElement);
+              } else {
+                clonedElement.querySelectorAll('.sibling-container details').forEach(details => {
+                  details.replaceWith(this.createProfessionalTableFromDetails(details as HTMLDetailsElement));
+                });
+              }
               clonedDocument.body.offsetHeight;
             },
-          foreignObjectRendering: false
+            foreignObjectRendering: false
           });
         } finally {
           document.body.removeChild(clonedElement);
