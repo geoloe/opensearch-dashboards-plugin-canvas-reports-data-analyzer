@@ -2006,31 +2006,6 @@ export class ReportingService {
       visualizationContainer.replaceWith(wrapper);
     }
   }
-  /**
-   * Replaces all HTMLDetailsElement with professional tables
-   * @param element - Element to process
-   */
-  private replaceDetailsWithTables(element: HTMLElement) {
-    element.querySelectorAll('details').forEach(details => {
-      const tableContainer = this.createProfessionalTableFromDetails(details);
-      const wrapper = document.createElement('div');
-      
-      Object.assign(wrapper.style, {
-        position: 'relative',
-        width: '100%',
-        height: 'auto',
-        minHeight: '50px',
-        overflow: 'visible',
-        zIndex: '9999',
-        pointerEvents: 'auto',
-        backgroundColor: '#ffffff'
-      });
-      
-      wrapper.appendChild(tableContainer);
-      details.replaceWith(wrapper);
-    });
-  }
-
 
   /**
    * Creates a professional table from HTMLDetailsElement
@@ -2178,54 +2153,97 @@ export class ReportingService {
         
         if (hasPieLabels) {
           this.replaceVisualizationWithTable(clonedElement);
+          clonedElement.querySelectorAll('[data-test-embeddable-id] figcaption.embPanel__header').forEach(el => {
+            el.remove();
+          });
+
+          document.body.appendChild(clonedElement);
+          
+          try {
+            Object.assign(clonedElement.style, {
+              position: 'fixed',
+              left: '-9999px',
+              top: '0',
+              width: `${rect.width}px`,
+              height: 'auto',
+              minHeight: '50px',
+              visibility: 'visible',
+              zIndex: '9999',
+              contain: 'none',
+              pointerEvents: 'auto',
+              backgroundColor: '#ffffff'
+            });
+
+            canvas = await html2canvas(clonedElement, {
+              useCORS: true,
+              scale: 2,
+              logging: true,
+              backgroundColor: null,
+              allowTaint: true,
+              onclone: (clonedDocument, clonedElement) => {
+                // Handle both pie charts and details tables in the clone
+                const hasPieLabels = clonedElement.querySelectorAll('.labels .label-text').length > 0;
+                if (hasPieLabels) {
+                  this.replaceVisualizationWithTable(clonedElement);
+                } else {
+                  clonedElement.querySelectorAll('.sibling-container details').forEach(details => {
+                    details.replaceWith(this.createProfessionalTableFromDetails(details as HTMLDetailsElement));
+                  });
+                }
+                clonedDocument.body.offsetHeight;
+              },
+              foreignObjectRendering: false
+            });
+          } finally {
+            document.body.removeChild(clonedElement);
+            original.style.visibility = 'hidden';
+          }
         } else {
-          this.replaceDetailsWithTables(clonedElement);
-        }
-
-        clonedElement.querySelectorAll('[data-test-embeddable-id] figcaption.embPanel__header').forEach(el => {
-          el.remove();
-        });
-
-        document.body.appendChild(clonedElement);
-        
-        try {
-          Object.assign(clonedElement.style, {
-            position: 'fixed',
-            left: '-9999px',
-            top: '0',
-            width: `${rect.width}px`,
-            height: 'auto',
-            minHeight: '50px',
-            visibility: 'visible',
-            zIndex: '9999',
-            contain: 'none',
-            pointerEvents: 'auto',
-            backgroundColor: '#ffffff'
+          clonedElement.querySelectorAll('[data-test-embeddable-id] figcaption.embPanel__header').forEach(el => {
+            el.remove();
           });
 
-          canvas = await html2canvas(clonedElement, {
-            useCORS: true,
-            scale: 2,
-            logging: true,
-            backgroundColor: null,
-            allowTaint: true,
-            onclone: (clonedDocument, clonedElement) => {
-              // Handle both pie charts and details tables in the clone
-              const hasPieLabels = clonedElement.querySelectorAll('.labels .label-text').length > 0;
-              if (hasPieLabels) {
-                this.replaceVisualizationWithTable(clonedElement);
-              } else {
-                clonedElement.querySelectorAll('.sibling-container details').forEach(details => {
-                  details.replaceWith(this.createProfessionalTableFromDetails(details as HTMLDetailsElement));
-                });
+          document.body.appendChild(clonedElement);
+
+          try {
+            Object.assign(clonedElement.style, {
+              position: 'fixed',
+              left: '-9999px',
+              top: '0',
+              width: `${rect.width}px`,
+              height: `${rect.height}px`,
+              minHeight: '50px',
+              visibility: 'visible',
+              zIndex: '9999',
+              contain: 'none',
+              pointerEvents: 'auto',
+              backgroundColor: '#ffffff'
+            });
+
+            canvas = await html2canvas(clonedElement, {
+              useCORS: true,
+              scale: scale,
+              logging: false,
+              backgroundColor: '#ffffff',
+              windowWidth: document.documentElement.scrollWidth,
+              windowHeight: document.documentElement.scrollHeight
+            });
+      
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const data = imageData.data;
+              for (let i = 0; i < data.length; i += 4) {
+                if (data[i] > 240 && data[i+1] > 240 && data[i+2] > 240) {
+                  data[i] = data[i+1] = data[i+2] = 255;
+                }
               }
-              clonedDocument.body.offsetHeight;
-            },
-            foreignObjectRendering: false
-          });
-        } finally {
-          document.body.removeChild(clonedElement);
-          original.style.visibility = 'hidden';
+              ctx.putImageData(imageData, 0, 0);
+            }
+          } finally {
+            document.body.removeChild(clonedElement);
+            original.style.visibility = 'hidden';
+          }
         }
       } else if (isTimeSeriesChart) {
         canvas = await html2canvas(clonedElement, {
@@ -2263,9 +2281,10 @@ export class ReportingService {
           logging: false,
           backgroundColor: '#ffffff',
           windowWidth: document.documentElement.scrollWidth,
-          windowHeight: document.documentElement.scrollHeight
+          windowHeight: document.documentElement.scrollHeight + 10
         });
   
+        // Set  white background from canvas if needed
         const ctx = canvas.getContext('2d');
         if (ctx) {
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
