@@ -156,8 +156,8 @@ const visualizationsWithoutStandardizedDimensionsThatWillBeSkipped = [
 ```
 
 ### Important Notes
-- **Pie Charts**: Require "show labels" enabled for proper rendering
-- **Browser**: Supports Chrome, Firefox, Edge
+- **Pie Charts**: If you set the option "Show Labels" the visualization will be represented in a table showing 2 columns. Label which will show all pie charts "pieces" Category Labels and Value containing each "pieces" percentage value.
+- **Browser**: Supports all Browsers.
 - **Theme**: Light mode recommended (dark mode produces dark backgrounds)
 - **Window Size**: Responsive handling ensures consistent output across screen sizes
 
