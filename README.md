@@ -115,11 +115,11 @@ canvas_report_data_analyzer:
    - Positions and font sizes configurable via YAML
 
 3. **Content Flow**:
-   - Optional TOC
+   - Optional TOC (Table of Contents)
    - Main content sections show:
      - Dashboard title
      - Active time range at generation trigger
-     - Visualizations with their corresponding titles. Enable the embedded title for a visualization and it will be used as the PDF visualizations title for that visualization.
+     - Visualizations with their corresponding titles. Enable the embedded title for a visualization and it will be used as the PDF visualizations title for that visualization. If no title is enabled, then '[No Title]' will be displayed.
      - Footer with:
        - Dashboard title
        - Organization name (can be defined in .yml seen above)
@@ -131,8 +131,20 @@ canvas_report_data_analyzer:
    - Subsequent pages: 2 visualizations each
    - Final page: 1-2 visualizations as needed
 
+### PDF Generation UI Views
+
+![UI Top Navigation Buttons](/external_assets/report_generation_ui_3.png)  
+*UI Top Navigation Buttons*
+
+![Successful PDF Generation](/external_assets/report_generation_ui_1.png)  
+*Successful PDF Generation*
+
+![Unsuccessful PDF Generation](/external_assets/report_generation_ui_2.png)  
+*Unsuccessful PDF Generation*
+
+
 ### PDF Visualizations
-For Dashboards with more than 20 Visualizations the Table of Contents page will overflow. But all visualizations will render on the PDF Report. You can set for these cases the `allow_table_of_contents` option to `false`.
+For Dashboards with more than 20 Visualizations the Table of Contents page will overflow. But all visualizations will render on the PDF Report. For these cases the `allow_table_of_contents` can be set to `false`, to completely remove a TOC page in Canvas PDF Reports.
 
 Here as js array all covered Visualization Types with standardized dimensions regardless of window size of the browser. All other will still render but very small or big browser window sizes will have impact on rendered visualizations.
 ```javascript
@@ -222,11 +234,12 @@ const visualizationsWithoutStandardizedDimensionsThatWillBeSkipped = [
 ### Common Issues
 | Symptom | Solution |
 |---------|----------|
-| Missing Generate PDF button | Assign `canvas_reporting` role |
-| Empty reports list | Check tenant type (Global/Private don't save) |
-| PDF generation fails | Verify template is exactly 2 pages |
-| Visualization missing | Raw Markdown and Discover Search Tables will be skipped |
-| Email sending disabled | Wait 10 minutes after previous send |
+| Missing Generate PDF button | Create and assign `canvas_reporting` role to user(s) |
+| Empty reports list | Check tenant type (Global/Private don't save) --> You can download and email reports for the tenant Private or Global. Generate PDFs directly from dashboards, but saving/deleting is disabled. |
+| PDF generation fails | Verify template is exactly 2 pages long and make sure that the dashboard loads visualizations/data first before triggering the PDF generation |
+| Visualization missing on PDF | Charts of Type: Raw Markdown and Discover Search Tables will be skipped |
+| Email sending disabled | Wait 10 minutes after previous send --> Rate Limiting for 10 Minutes is enforced on all users to prevent missuse. |
+| 'No valid index patterns available' on Data Analysis View | Assign `all_access` role to `kibanaserver` user
 
 ## Development Notes
 
@@ -266,8 +279,10 @@ const validateA4Position = (value: number, axis: 'x' | 'y') => {
 
 ### Note
 
-I want to mention that the E-Mail template was forked from the Reporting CLI Tool from the Opensearch Project.
+The E-Mail template was forked from the [Reporting CLI Tool](https://github.com/opensearch-project/reporting-cli) from the Opensearch Project. 
 
-All data presented in the PDF examples, Dashboards, logos and images displayed in the Sample PDFs belong to Opensearch.
+All data presented in the PDF examples, Dashboards, logos and images displayed in the Sample PDFs belong to Opensearch. This applies for the external asset [Opensearch Logo](/external_assets/opensearch_mark_on_light.png)
+
+The [report PDF Template](/external_assets/report_template.pdf) shown in the example Report PDFs is not meant as official template for the plugin, only as reference for other PDF templates. Not meant for use in Production Environments.
 
 Please feel free to fork this project.
